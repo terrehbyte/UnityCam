@@ -10,8 +10,8 @@ public interface IInputQueriable
 [System.Serializable]
 public struct AxisInput
 {
-    public string axisName;
-    public float axisValue;
+    public readonly string axisName;
+    public readonly float axisValue;
 
     public AxisInput(string axisNameValue, float axisValueValue)
     {
@@ -23,8 +23,8 @@ public struct AxisInput
 [System.Serializable]
 public struct ActionInput
 {
-    public string actionName;
-    bool actionValue;
+    public readonly string actionName;
+    public readonly bool actionValue;
     
     public ActionInput(string actionNameValue, bool isEngagedValue)
     {

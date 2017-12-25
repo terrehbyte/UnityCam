@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+[SelectionBase]
 public class PlayerHub : MonoBehaviour, IInputQueriable
 {
     public PlayerController controller;

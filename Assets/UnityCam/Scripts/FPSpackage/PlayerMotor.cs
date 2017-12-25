@@ -15,12 +15,17 @@ public class PlayerMotor : MonoBehaviour, IInputQueriable
 
     public float jumpForce = 2f;
 
+    //public Vector3 groundCheckOriginOffset;
+
+    public float stepOffset = 0.5f;
+    public float minGroundDistance = 0.01f;
     public float minGroundAngle = 60.0f;
     public float groundFriction = 3;
-    protected Vector3 avgGroundNormal;
+    protected Vector3 avgGroundNormal = Vector3.zero;
+    protected Vector3 lastGroundPoint;
 
     [HideInInspector]
-    public Vector3 targetVelocity;
+    public Vector3 targetVelocity = Vector3.zero;
     public Vector3 lastVelocity { get; protected set;}
 
     public float groundAcceleration = 300.0f;
@@ -98,22 +103,83 @@ public class PlayerMotor : MonoBehaviour, IInputQueriable
         return isGrounded ? prevVelocity + (Vector3.up * jumpForce) : prevVelocity;
     }
 
+    float overlapFudge = 0.1f;
+
+    bool PlayerOverlap(out Collider[] overlapColliders)
+    {
+        // are we already overlapping with something?
+        if(attachedCollider is BoxCollider)
+        {
+            BoxCollider boxColl = attachedCollider as BoxCollider; 
+            var overlaps = Physics.OverlapBox(transform.TransformPoint(boxColl.center), boxColl.size / 2, transform.rotation, Physics.AllLayers, QueryTriggerInteraction.Ignore);
+
+            List<Collider> overlapping = new List<Collider>();
+
+            foreach(var overlap in overlaps)
+            {
+                if(overlap == attachedCollider) {continue;}
+
+                overlapping.Add(overlap);
+            }
+
+            overlapColliders = overlapping.ToArray();
+            return overlapping.Count > 0;
+        }
+        else
+        {
+            throw new Exception("Unsupported collider in use.");
+        }
+    }
+
+    bool PlayerTrace(Vector3 destination, out RaycastHit traceHit)
+    {        
+        Collider[] overlappingColliders;
+        if(PlayerOverlap(out overlappingColliders)) { traceHit = new RaycastHit(); return true; }
+
+        Vector3 traceVector = destination - transform.position;
+        RaycastHit[] hits = attachedRigidbody.SweepTestAll(traceVector.normalized, traceVector.magnitude, QueryTriggerInteraction.Ignore);
+
+        foreach(var hit in hits)
+        {
+            // ignore our collider
+            if(hit.collider == attachedCollider) { continue; }
+
+            traceHit = hit;
+            return true;
+        }
+
+        traceHit = new RaycastHit();
+        return false;
+    }
+
     // Returns true if the player is grounded.
     bool CheckGrounded()
     {
-        RaycastHit hitInfo;
+        bool traceHit = false;
+        bool result = false;
+        float groundRayLength = GetGroundCheckLength();
 
-        const float groundRayLength = 1.1f;
-        Debug.DrawRay(transform.position, Vector3.down * groundRayLength, Color.green);
+        Debug.DrawRay(transform.position, (Vector3.down * groundRayLength));
 
-        // TODO: adjust raycast by collider size
-        if(Physics.Raycast(new Ray(transform.position, Vector3.down), out hitInfo, groundRayLength))
+        RaycastHit hit;
+        if(PlayerTrace(transform.position + (Vector3.down * (groundRayLength * 2)), out hit))
         {
-            float angle = Vector3.Angle(Vector3.forward, hitInfo.normal);
-            return angle > minGroundAngle;
+            traceHit = true;
+            avgGroundNormal = hit.normal;
+            lastGroundPoint = hit.point;
+            result = Vector3.Angle(Vector3.forward, hit.normal) > minGroundAngle;
         }
+        else
+        {
+            avgGroundNormal = Vector3.zero;
+        }
+        
 
-        return false;
+        if(!result)
+        {
+            int v = 0;
+        }
+        return result;
     }
 
     public void BindInputs()
@@ -141,6 +207,9 @@ public class PlayerMotor : MonoBehaviour, IInputQueriable
         // transform player movement into world-space
         playerInput = transform.TransformVector(playerInput);
 
+        if(playerInput.magnitude > 0.0f)
+            playerInput = Vector3.ProjectOnPlane(playerInput, avgGroundNormal);
+
         // determine final velocity
         Vector3 finalPlayerVelocity = isGrounded ? MoveGround(playerInput, attachedRigidbody.velocity) :
                                                    MoveAir(playerInput, attachedRigidbody.velocity);
@@ -151,6 +220,24 @@ public class PlayerMotor : MonoBehaviour, IInputQueriable
 
         // assign final velocity
         targetVelocity = lastVelocity = finalPlayerVelocity;
+    }
+
+    public Vector3 GetGroundCheckOrigin()
+    {
+        BoxCollider box = attachedCollider as BoxCollider;
+        return transform.TransformPoint(box.center);// + groundCheckOriginOffset;
+    }
+
+    public float GetGroundCheckLength()
+    {
+        // should be long enough to detect if we will be grounded on the next physics update
+        return (Physics.gravity * Time.fixedDeltaTime).magnitude;
+    }
+
+    public float GetGroundCheckRadius()
+    {
+        var colliderExtents = attachedCollider.bounds.extents;
+        return Mathf.Max(colliderExtents.x, colliderExtents.y);
     }
 
     void Reset()
@@ -167,6 +254,29 @@ public class PlayerMotor : MonoBehaviour, IInputQueriable
 
     void FixedUpdate()
     {
+        // update velocity
         attachedRigidbody.velocity = targetVelocity;
+    }
+
+    void OnDrawGizmos()
+    {
+        Gizmos.color = isGrounded ? Color.green : Color.red;
+        if(attachedCollider is BoxCollider)
+        {
+            BoxCollider box = attachedCollider as BoxCollider;
+            Vector3 boxExtents = box.size;
+            boxExtents.y = 0.01f;
+            Gizmos.DrawCube(GetGroundCheckOrigin(), boxExtents);
+            //Gizmos.DrawSphere(transform.TransformPoint(box.center), 1.0f);
+            Gizmos.DrawRay(GetGroundCheckOrigin(), Vector3.down * GetGroundCheckLength());
+        }
+
+        Gizmos.color = Color.cyan;
+
+        BoxCollider boxColl = attachedCollider as BoxCollider; 
+
+        Gizmos.DrawRay(transform.position, avgGroundNormal * 10.0f);
+        //Gizmos.DrawCube(transform.TransformPoint(boxColl.center), boxColl.size);
+        //Gizmos.DrawCube(lastGroundPoint, Vector3.one / 2);
     }
 }
