@@ -11,6 +11,6 @@ public class PlayerFPSHUD : MonoBehaviour
 
     public void Update()
     {
-        speedometer.text = playerHub.GetComponent<Rigidbody>().velocity.magnitude.ToString("0.00");
+        speedometer.text = playerHub.motor.actualVelocity.magnitude.ToString("0.00");
     }
 }

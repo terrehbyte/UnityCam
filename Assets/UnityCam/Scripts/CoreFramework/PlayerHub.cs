@@ -114,7 +114,7 @@ public class PlayerHub : MonoBehaviour, IInputQueriable
     private void Update()
     {
         lookSettings.Update();
-        motor.UpdateMovement();
+        motor.UpdateTargetVelocity();
     }
 
     void Awake()
